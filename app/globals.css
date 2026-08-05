@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  /* Warm paper neutrals keep the dashboard calm and print-like. */
+  --color-paper: #f6f5f2;
+  --color-paper-deep: #efede8;
+  --color-surface: #ffffff;
+
+  --color-ink: #1b1e22;
+  --color-ink-soft: #4c545d;
+  --color-ink-muted: #838b95;
+  --color-hairline: #e4e2dc;
+
+  /* Smoky blue-grey — the brand accent, used for gradients and highlights. */
+  --color-smoke-50: #f3f5f7;
+  --color-smoke-100: #e3e8ec;
+  --color-smoke-200: #c7d0d8;
+  --color-smoke-300: #a3b1bd;
+  --color-smoke-400: #7f909f;
+  --color-smoke-500: #647685;
+  --color-smoke-600: #4e5e6b;
+  --color-smoke-700: #3d4a55;
+  --color-smoke-800: #2f3941;
+  --color-smoke-900: #232a30;
+
+  --color-gold: #b8863b;
+  --color-mint: #3f7f6a;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+
+  --animate-toast-in: toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numeric readouts shouldn't jitter in width as digits tick over. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background-color: var(--color-smoke-200);
+  color: var(--color-smoke-900);
+}
