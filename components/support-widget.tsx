@@ -39,17 +39,40 @@ export function SupportWidget() {
 function ZendeskWidget({ zendeskKey }: { zendeskKey: string }) {
   const [failed, setFailed] = useState(false);
 
-  // If the snippet can't load (offline demo, bad key), fall back to the panel
-  // rather than leaving the corner empty.
-  if (failed) return <PlaceholderWidget />;
-
   return (
-    <Script
-      id="ze-snippet"
-      src={`https://static.zdassets.com/ekr/snippet.js?key=${encodeURIComponent(zendeskKey)}`}
-      strategy="lazyOnload"
-      onError={() => setFailed(true)}
-    />
+    <>
+      <Script
+        id="ze-snippet"
+        src={`https://static.zdassets.com/ekr/snippet.js?key=${encodeURIComponent(zendeskKey)}`}
+        strategy="lazyOnload"
+        onError={() => setFailed(true)}
+      />
+      {/*
+        Deliberately does NOT fall back to the placeholder panel. Substituting a
+        look-alike mockup made a blocked script (ad blocker, VPN, corporate
+        proxy on static.zdassets.com) look like a working widget that simply
+        wasn't connected to Zendesk — confusing during a demo. Surface the real
+        failure instead.
+      */}
+      {failed ? <WidgetBlockedNotice /> : null}
+    </>
+  );
+}
+
+function WidgetBlockedNotice() {
+  return (
+    <div
+      role="status"
+      className="fixed bottom-4 right-4 z-50 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-lg sm:bottom-6 sm:right-6"
+    >
+      <p className="text-[13px] font-semibold text-amber-900">
+        Zendesk widget didn&apos;t load
+      </p>
+      <p className="mt-1 text-[12px] leading-relaxed text-amber-800">
+        <code className="font-mono">static.zdassets.com</code> was blocked — usually
+        an ad blocker, VPN, or network policy. Allow that domain, then reload.
+      </p>
+    </div>
   );
 }
 
