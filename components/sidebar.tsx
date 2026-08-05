@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import { useRewards } from "./rewards-provider";
+import { openSupport } from "@/lib/support-bus";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -76,9 +77,10 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Support entry point — the "floating" chat affordance for the sidebar. */}
+      {/* Support entry point — opens the same widget pinned to the bottom-right. */}
       <button
         type="button"
+        onClick={openSupport}
         className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-hairline bg-surface p-4 text-left shadow-xs transition hover:border-smoke-300 hover:shadow-sm"
       >
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-linear-to-br from-smoke-600 to-smoke-900 text-white">

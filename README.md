@@ -107,9 +107,31 @@ curl -X POST http://localhost:3000/api/customer/update-wallet \
 - Wallet amounts round to cents, so repeated adds don't accumulate float drift.
 - Invalid `action`, non-numeric values, and malformed JSON return `400`.
 
+## Support widget
+
+Pinned bottom-right. Out of the box it renders a self-contained placeholder
+chat panel, seeded with the customer's live points and wallet balance to show
+the context an agent would receive.
+
+To load the **real Zendesk Web Widget** instead, set a key and restart:
+
+```bash
+# .env.local
+NEXT_PUBLIC_ZENDESK_KEY=your-widget-key
+```
+
+The key is the value from your Zendesk snippet's
+`static.zdassets.com/ekr/snippet.js?key=…` URL (Admin Center → Channels →
+Messaging, or Widget → Installation). With it set, the Zendesk script draws its
+own launcher and the placeholder is skipped; if the script fails to load, the
+placeholder comes back so the corner is never empty.
+
+The sidebar "Need help?" card opens whichever widget is active — it calls the
+real widget's `zE('messenger', 'open')` when available.
+
 ## Demo controls
 
-The collapsible drawer in the bottom-right corner drives the same public API,
+The collapsible drawer in the bottom-left corner drives the same public API,
 not internal state — so anything it does, an agent can do:
 
 - **+100 pts** / **+$25 wallet** quick actions
@@ -135,11 +157,13 @@ components/
   points-card.tsx        balance, progress, collapsible history
   vip-card.tsx           spend progress toward VIP
   earn-points-grid.tsx   serif callout + 5 earn-points cards
-  demo-drawer.tsx        live demo controls
+  demo-drawer.tsx        live demo controls (bottom-left)
+  support-widget.tsx     Zendesk widget / placeholder chat (bottom-right)
   toaster.tsx            toast notifications
 lib/
   db.ts                  in-memory store + mutations
   api.ts                 CORS, validation, JSON helpers
+  support-bus.ts         open-the-widget event bus
   utils.ts               cn(), formatting, progress math
   types.ts               shared types
 ```

@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useRewards } from "./rewards-provider";
+import { onSupportOpened } from "@/lib/support-bus";
 import { cn } from "@/lib/utils";
 
 function CurlSnippet({ userId }: { userId: string }) {
@@ -90,8 +91,18 @@ export function DemoDrawer() {
 
   const [open, setOpen] = useState(false);
 
+  // Below `sm` there isn't room for both panels, so yield to the support widget.
+  useEffect(
+    () =>
+      onSupportOpened(() => {
+        if (window.matchMedia("(max-width: 639px)").matches) setOpen(false);
+      }),
+    [],
+  );
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+    /* Bottom-left, leaving the bottom-right corner for the support widget. */
+    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start gap-2 sm:bottom-6 sm:left-6">
       {open ? (
         <div className="w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-smoke-700 bg-smoke-800 text-white shadow-2xl shadow-smoke-900/40">
           <div className="flex items-center justify-between border-b border-smoke-700 px-4 py-3">

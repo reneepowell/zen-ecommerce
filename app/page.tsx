@@ -13,6 +13,7 @@ import { PointsCard } from "@/components/points-card";
 import { VipCard } from "@/components/vip-card";
 import { EarnPointsGrid } from "@/components/earn-points-grid";
 import { DemoDrawer } from "@/components/demo-drawer";
+import { SupportWidget } from "@/components/support-widget";
 import { Toaster } from "@/components/toaster";
 
 // Balances live in memory and change out of band, so never prerender this.
@@ -60,7 +61,9 @@ export default function Home() {
         </p>
       </footer>
 
+      {/* Demo drawer sits bottom-left; the support widget owns bottom-right. */}
       <DemoDrawer />
+      <SupportWidget />
       <Toaster />
     </RewardsProvider>
   );
