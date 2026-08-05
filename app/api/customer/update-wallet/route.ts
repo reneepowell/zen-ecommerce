@@ -1,4 +1,4 @@
-import { fail, ok, parseAction, parseAmount, preflight, readJson } from "@/lib/api";
+import { fail, ok, parseAction, parseAmount, preflight, withLogging } from "@/lib/api";
 import { DEFAULT_CUSTOMER_ID, listCustomers, updateWallet } from "@/lib/db";
 import type { ActivitySource } from "@/lib/types";
 
@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
  * POST /api/customer/update-wallet
  * Body: { user_id: string, action: "add" | "set", amount: number, label?: string }
  */
-export async function POST(request: Request) {
-  const body = await readJson(request);
+export const POST = withLogging("update-wallet", async (body) => {
   if (!body) return fail("Request body must be valid JSON.", 400);
 
   const userId = typeof body.user_id === "string" ? body.user_id : DEFAULT_CUSTOMER_ID;
@@ -42,7 +41,7 @@ export async function POST(request: Request) {
     balance: result.customer.wallet,
     customer: result.customer,
   });
-}
+});
 
 export async function OPTIONS() {
   return preflight();

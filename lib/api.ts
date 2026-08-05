@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logRequest } from "./request-log";
 import type { UpdateAction } from "./types";
 
 /** Permissive CORS so an external agent can call these routes from anywhere. */
@@ -43,4 +44,52 @@ export async function readJson(request: Request): Promise<Record<string, unknown
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Wraps a mutation handler so every attempt lands in the request log —
+ * including rejected ones, which are the interesting case when an agent's
+ * calls aren't taking effect.
+ *
+ * Reads the body here and hands the text to the handler, because a Request
+ * body can only be consumed once.
+ */
+export function withLogging(
+  route: string,
+  handler: (body: Record<string, unknown> | undefined, raw: string) => Promise<Response>,
+) {
+  return async function POST(request: Request): Promise<Response> {
+    const raw = await request.text();
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      const json = JSON.parse(raw);
+      if (json && typeof json === "object") parsed = json as Record<string, unknown>;
+    } catch {
+      // Left undefined; the handler turns this into a 400.
+    }
+
+    const response = await handler(parsed, raw);
+
+    // Read a clone so the caller still gets an unconsumed body.
+    let result = "";
+    try {
+      const data = (await response.clone().json()) as Record<string, unknown>;
+      result = data.ok
+        ? `previous=${data.previous} delta=${data.delta} balance=${data.balance}`
+        : String(data.error ?? "");
+    } catch {
+      result = "(unreadable response)";
+    }
+
+    await logRequest({
+      at: new Date().toISOString(),
+      route,
+      status: response.status,
+      userAgent: request.headers.get("user-agent")?.slice(0, 120) ?? "(none)",
+      body: raw.slice(0, 400),
+      result,
+    });
+
+    return response;
+  };
 }

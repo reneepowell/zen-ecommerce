@@ -129,6 +129,23 @@ curl -X POST http://localhost:3000/api/customer/update-wallet \
 
 - `GET /api/customers` — profile summaries for the switcher.
 - `POST /api/reset` — restore all profiles to seed values between demos.
+- `GET /api/health` — active storage backend and widget-auth status.
+- `GET /api/log` — last 50 mutation attempts, newest first.
+
+### Debugging an agent that "isn't working"
+
+`GET /api/log` separates the two failures that look identical from the
+dashboard:
+
+- **Entries with a 4xx status** — the agent reached the app and was rejected.
+  `result` gives the reason and `body` shows exactly what it sent (usually a
+  wrong field name, e.g. `customer` instead of `user_id`).
+- **No entries at all** — the agent never called. The problem is upstream: the
+  action didn't fire, or its URL is wrong.
+
+Note that a **trailing slash returns `308`**, and many HTTP clients drop the
+POST body when following a redirect. Use `/api/customer/update-points`, not
+`/api/customer/update-points/`.
 
 ### Behavior worth knowing
 
@@ -216,6 +233,7 @@ app/
   api/reset/route.ts                     POST   reseed
   api/health/route.ts                    GET    active storage backend
   api/zendesk/token/route.ts             GET    signed messaging JWT
+  api/log/route.ts                       GET    recent mutation attempts
   page.tsx                               dashboard (server component)
 components/
   rewards-provider.tsx   client state, polling, toast dispatch
@@ -233,6 +251,7 @@ lib/
   api.ts                 CORS, validation, JSON helpers
   support-bus.ts         open-the-widget event bus
   zendesk-jwt.ts         signs messaging JWTs (server-side secret)
+  request-log.ts         records mutation attempts for debugging
   utils.ts               cn(), formatting, progress math
   types.ts               shared types
 ```
