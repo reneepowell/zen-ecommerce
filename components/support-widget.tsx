@@ -18,8 +18,19 @@ import { cn, formatMoney, formatPoints } from "@/lib/utils";
  * shows a working support entry point, seeded with the customer's live balances
  * to illustrate the context an agent would receive.
  */
+/**
+ * Default widget key, so a fresh deploy loads the real widget without needing
+ * env vars configured. Safe to commit: Zendesk widget keys are public by
+ * design — the snippet URL containing this key is served in the page HTML to
+ * every visitor. Override per-environment with `NEXT_PUBLIC_ZENDESK_KEY`.
+ */
+const DEFAULT_ZENDESK_KEY = "0d7ce6d8-be5f-4ab9-8d37-12f18b24a242";
+
 export function SupportWidget() {
-  const zendeskKey = process.env.NEXT_PUBLIC_ZENDESK_KEY;
+  // Empty string (not just unset) disables the real widget and forces the
+  // placeholder — useful for offline demos.
+  const configured = process.env.NEXT_PUBLIC_ZENDESK_KEY;
+  const zendeskKey = configured === undefined ? DEFAULT_ZENDESK_KEY : configured;
 
   if (zendeskKey) return <ZendeskWidget zendeskKey={zendeskKey} />;
   return <PlaceholderWidget />;
