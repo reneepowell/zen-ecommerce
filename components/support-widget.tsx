@@ -7,6 +7,13 @@ import { useRewards } from "./rewards-provider";
 import { notifySupportOpened, onOpenSupport } from "@/lib/support-bus";
 import { cn, formatMoney, formatPoints } from "@/lib/utils";
 
+declare global {
+  interface Window {
+    // The Zendesk snippet installs this; it's absent until the script loads.
+    zE?: (channel: string, command: string, arg?: unknown) => Promise<void> | void;
+  }
+}
+
 /**
  * Support widget, pinned bottom-right.
  *
@@ -38,6 +45,61 @@ export function SupportWidget() {
 
 function ZendeskWidget({ zendeskKey }: { zendeskKey: string }) {
   const [failed, setFailed] = useState(false);
+  const { customer } = useRewards();
+  const customerId = customer.id;
+
+  // Authenticate the visitor once the snippet is ready, and re-authenticate
+  // whenever the demo switches profiles — otherwise the conversation would stay
+  // attached to whoever was selected when the page first loaded.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function login() {
+      const zE = window.zE;
+      if (typeof zE !== "function") return;
+
+      // logoutUser clears the previous end user and their conversation history,
+      // so switching from Carol to Nancy doesn't leak Carol's thread.
+      try {
+        await zE("messenger", "logoutUser");
+      } catch {
+        // No one was logged in yet — expected on first load.
+      }
+      if (cancelled) return;
+
+      zE("messenger", "loginUser", (callback: (jwt: string) => void) => {
+        // Zendesk calls this again on its own when the token expires, so fetch
+        // a fresh one here rather than reusing a captured value.
+        void fetch(`/api/zendesk/token?id=${encodeURIComponent(customerId)}`)
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => {
+            if (data?.token) callback(data.token);
+            else console.warn("[zendesk] no JWT returned; staying anonymous");
+          })
+          .catch((error) => console.warn("[zendesk] token fetch failed:", error));
+      });
+    }
+
+    // The snippet loads lazily, so zE may not exist yet on first render.
+    if (typeof window.zE === "function") {
+      void login();
+    } else {
+      const timer = window.setInterval(() => {
+        if (typeof window.zE === "function") {
+          window.clearInterval(timer);
+          void login();
+        }
+      }, 300);
+      return () => {
+        cancelled = true;
+        window.clearInterval(timer);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
 
   return (
     <>

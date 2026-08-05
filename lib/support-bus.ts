@@ -6,15 +6,12 @@
 const OPEN_EVENT = "zen:open-support";
 const OPENED_EVENT = "zen:support-opened";
 
-interface ZendeskGlobal {
-  (channel: string, command: string): void;
-}
-
 export function openSupport(): void {
   if (typeof window === "undefined") return;
 
-  // Prefer the real widget when the Zendesk snippet has loaded.
-  const zE = (window as typeof window & { zE?: ZendeskGlobal }).zE;
+  // Prefer the real widget when the Zendesk snippet has loaded. The `zE` type
+  // is declared alongside the widget in components/support-widget.tsx.
+  const zE = window.zE;
   if (typeof zE === "function") {
     try {
       zE("messenger", "open");

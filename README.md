@@ -159,6 +159,41 @@ placeholder comes back so the corner is never empty.
 The sidebar "Need help?" card opens whichever widget is active — it calls the
 real widget's `zE('messenger', 'open')` when available.
 
+If the snippet is blocked (ad blocker, VPN, corporate proxy on
+`static.zdassets.com`) the corner shows a short notice naming the blocked
+domain. It deliberately does **not** substitute the mock panel — a look-alike
+made a network failure indistinguishable from a working-but-disconnected widget.
+
+### Authenticated visitors (JWT)
+
+Without auth the widget treats every visitor as anonymous, so an agent can't
+tell it's talking to Carol Foster. Set these to sign a messaging JWT
+(Admin Center → Channels → Messaging → your widget → **Authentication**, then
+create a key — the secret is shown once):
+
+```bash
+ZENDESK_JWT_KEY_ID=your-key-id
+ZENDESK_JWT_SECRET=your-shared-secret
+```
+
+Both are **server-side only** — no `NEXT_PUBLIC_` prefix. Anyone holding the
+secret can impersonate any end user in your instance.
+
+With them set, the widget calls `zE('messenger','loginUser')` and fetches a
+token from `GET /api/zendesk/token?id=<user_id>`, signed HS256 with `kid` in the
+header and a 10-minute expiry. Claims sent: `external_id` (the profile id, which
+is what Zendesk matches an end user on), `name`, `email`, `email_verified`, and
+`scope: "user"`. The agent workspace then shows the real customer instead of a
+visitor.
+
+Switching profiles calls `logoutUser` before re-authenticating, so Nancy's
+conversation doesn't inherit Carol's thread. Unset the vars and the widget still
+loads — just anonymously — and `/api/zendesk/token` returns `501`.
+
+In this demo the identity comes from the selected profile (a query param). A
+real storefront must derive it from the session cookie instead; taking it from
+the client would let anyone mint a token as anyone.
+
 ## Demo controls
 
 The collapsible drawer in the bottom-left corner drives the same public API,
@@ -180,6 +215,7 @@ app/
   api/customers/route.ts                 GET    summaries
   api/reset/route.ts                     POST   reseed
   api/health/route.ts                    GET    active storage backend
+  api/zendesk/token/route.ts             GET    signed messaging JWT
   page.tsx                               dashboard (server component)
 components/
   rewards-provider.tsx   client state, polling, toast dispatch
@@ -196,6 +232,7 @@ lib/
   seed.ts                canonical profile seed data + goal constants
   api.ts                 CORS, validation, JSON helpers
   support-bus.ts         open-the-widget event bus
+  zendesk-jwt.ts         signs messaging JWTs (server-side secret)
   utils.ts               cn(), formatting, progress math
   types.ts               shared types
 ```
