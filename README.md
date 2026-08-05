@@ -21,11 +21,41 @@ npm run build && npm start   # production
 
 ## How the live updates work
 
-State lives in an in-memory store (`lib/db.ts`) attached to `globalThis`, so it
-survives dev-server hot reloads and is shared across route handlers. The
-dashboard polls `GET /api/customer` every 2.5s; when a balance changes from a
-source other than the current tab, a toast announces the delta. **Restarting the
-server resets every profile to its seed values.**
+The dashboard polls `GET /api/customer` every 2.5s; when a balance changes from a
+source other than the current tab, a toast announces the delta.
+
+## Storage — read this before deploying
+
+`lib/db.ts` has two backends, chosen at runtime. Check which one is live with
+`GET /api/health`.
+
+| Backend | When | Behavior |
+| --- | --- | --- |
+| **Redis** | Redis env vars present | Writes persist across instances and restarts |
+| **In-memory** | no env vars | Fine locally; **writes are lost on serverless** |
+
+**In-memory does not work on Vercel.** Each request can hit a different instance
+with its own memory, and instances are recycled when idle — so an agent's write
+lands on one instance and disappears seconds later. This was reproduced on a real
+deployment: a `+500` write read back correctly while warm, then reverted to the
+seed value after ~75s idle.
+
+To fix it, provision a Redis store and set these (Vercel Marketplace → Upstash
+adds `KV_REST_API_*` automatically):
+
+```bash
+KV_REST_API_URL=...
+KV_REST_API_TOKEN=...
+# UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN also work
+```
+
+Local development needs no env vars — it uses the in-memory store, where a single
+long-lived process makes writes stick. If Redis is configured but unreachable,
+the store logs a warning and degrades to memory instead of erroring.
+
+Mutations are read-modify-write against one JSON blob, not per-field atomic ops.
+Two writes in the same millisecond could interleave — acceptable for a demo
+driven by one agent and one presenter.
 
 ## Demo profiles
 
@@ -149,6 +179,7 @@ app/
   api/customer/update-wallet/route.ts    POST   wallet
   api/customers/route.ts                 GET    summaries
   api/reset/route.ts                     POST   reseed
+  api/health/route.ts                    GET    active storage backend
   page.tsx                               dashboard (server component)
 components/
   rewards-provider.tsx   client state, polling, toast dispatch
@@ -161,7 +192,8 @@ components/
   support-widget.tsx     Zendesk widget / placeholder chat (bottom-right)
   toaster.tsx            toast notifications
 lib/
-  db.ts                  in-memory store + mutations
+  db.ts                  storage adapter (Redis or in-memory) + mutations
+  seed.ts                canonical profile seed data + goal constants
   api.ts                 CORS, validation, JSON helpers
   support-bus.ts         open-the-widget event bus
   utils.ts               cn(), formatting, progress math

@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import type {
   ActivityEntry,
   ActivitySource,
@@ -5,187 +6,86 @@ import type {
   CustomerSummary,
   UpdateAction,
 } from "./types";
+import { DEFAULT_CUSTOMER_ID, POINTS_GOAL, VIP_SPEND_GOAL, seed } from "./seed";
 
-/** Points needed for the next rewards unlock. */
-export const POINTS_GOAL = 2500;
-/** Lifetime spend needed to reach VIP. */
-export const VIP_SPEND_GOAL = 500;
-
-export const DEFAULT_CUSTOMER_ID = "carol_foster";
-
-function seed(): Customer[] {
-  return [
-    {
-      id: "carol_foster",
-      name: "Carol Foster",
-      email: "carol.foster@example.com",
-      initials: "CF",
-      points: 2328,
-      wallet: 150.0,
-      tier: "Member",
-      joined: "4/2/2024",
-      spend: 412,
-      activity: [
-        {
-          id: "carol_foster-seed-1",
-          label: "Order #10428 — 3% back in points",
-          points: 128,
-          at: "2026-07-28T16:20:00.000Z",
-          source: "seed",
-        },
-        {
-          id: "carol_foster-seed-2",
-          label: "Wrote a product review",
-          points: 100,
-          at: "2026-07-14T13:05:00.000Z",
-          source: "seed",
-        },
-        {
-          id: "carol_foster-seed-3",
-          label: "Store credit issued",
-          amount: 25,
-          at: "2026-06-30T09:45:00.000Z",
-          source: "seed",
-        },
-      ],
-    },
-    {
-      id: "nancy_drew",
-      name: "Nancy Drew",
-      email: "nancy.drew@example.com",
-      initials: "ND",
-      points: 1850,
-      wallet: 45.0,
-      tier: "Member",
-      joined: "1/15/2025",
-      spend: 268,
-      activity: [
-        {
-          id: "nancy_drew-seed-1",
-          label: "Order #10391 — 3% back in points",
-          points: 96,
-          at: "2026-07-19T11:30:00.000Z",
-          source: "seed",
-        },
-        {
-          id: "nancy_drew-seed-2",
-          label: "Completed profile",
-          points: 50,
-          at: "2026-05-02T18:10:00.000Z",
-          source: "seed",
-        },
-      ],
-    },
-    {
-      id: "alex_morgan",
-      name: "Alex Morgan",
-      email: "alex.morgan@example.com",
-      initials: "AM",
-      points: 3400,
-      wallet: 210.5,
-      tier: "VIP",
-      joined: "11/10/2023",
-      spend: 728,
-      activity: [
-        {
-          id: "alex_morgan-seed-1",
-          label: "VIP tier bonus",
-          points: 500,
-          at: "2026-07-01T08:00:00.000Z",
-          source: "seed",
-        },
-        {
-          id: "alex_morgan-seed-2",
-          label: "Refund to wallet — Order #10233",
-          amount: 60.5,
-          at: "2026-06-11T15:22:00.000Z",
-          source: "seed",
-        },
-      ],
-    },
-    {
-      id: "jordan_lee",
-      name: "Jordan Lee",
-      email: "jordan.lee@example.com",
-      initials: "JL",
-      points: 450,
-      wallet: 0.0,
-      tier: "Member",
-      joined: "6/20/2025",
-      spend: 74,
-      activity: [
-        {
-          id: "jordan_lee-seed-1",
-          label: "Welcome bonus",
-          points: 250,
-          at: "2026-06-20T10:00:00.000Z",
-          source: "seed",
-        },
-      ],
-    },
-    {
-      id: "sam_taylor",
-      name: "Sam Taylor",
-      email: "sam.taylor@example.com",
-      initials: "ST",
-      points: 4900,
-      wallet: 320.0,
-      tier: "VIP",
-      joined: "8/05/2023",
-      spend: 1140,
-      activity: [
-        {
-          id: "sam_taylor-seed-1",
-          label: "Order #10402 — 3% back in points",
-          points: 214,
-          at: "2026-07-25T20:14:00.000Z",
-          source: "seed",
-        },
-        {
-          id: "sam_taylor-seed-2",
-          label: "Birthday reward",
-          points: 300,
-          at: "2026-08-05T07:00:00.000Z",
-          source: "seed",
-        },
-      ],
-    },
-  ];
-}
+export { DEFAULT_CUSTOMER_ID, POINTS_GOAL, VIP_SPEND_GOAL };
 
 /**
- * The store lives on globalThis so it survives dev-server hot reloads and is
- * shared across route handler module instances. A demo app has no real
- * persistence layer — restarting the server resets everyone to seed values.
+ * Storage has two backends:
+ *
+ * - **Redis** (when `KV_REST_API_URL`/`KV_REST_API_TOKEN` or the `UPSTASH_*`
+ *   equivalents are set). Required in serverless, where each request may hit a
+ *   different instance and instances are recycled when idle — in-memory writes
+ *   silently vanish there.
+ * - **In-memory**, kept on `globalThis` so it survives dev hot reloads. Fine for
+ *   local development and resets whenever the process restarts.
+ *
+ * Mutations are read-modify-write against a single JSON blob rather than
+ * per-field atomic ops. Two writes landing in the same millisecond could
+ * interleave; for a demo driven by one agent and one presenter that's an
+ * acceptable trade for keeping the whole store trivially inspectable.
  */
-interface Store {
-  customers: Map<string, Customer>;
-  counter: number;
+
+const REDIS_KEY = "zen:customers:v1";
+
+function redisClient(): Redis | null {
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
+/** Which backend is active, for the /api/health readout. */
+export function storageMode(): "redis" | "memory" {
+  return redisClient() ? "redis" : "memory";
 }
 
 const globalStore = globalThis as typeof globalThis & {
-  __zenEcommerceStore?: Store;
+  __zenEcommerceStore?: Customer[];
 };
 
-function getStore(): Store {
-  if (!globalStore.__zenEcommerceStore) {
-    globalStore.__zenEcommerceStore = {
-      customers: new Map(seed().map((c) => [c.id, c])),
-      counter: 0,
-    };
-  }
+function memoryRead(): Customer[] {
+  if (!globalStore.__zenEcommerceStore) globalStore.__zenEcommerceStore = seed();
   return globalStore.__zenEcommerceStore;
 }
 
-/** Deep-ish clone so callers can never mutate the store by holding a reference. */
-function clone(customer: Customer): Customer {
-  return { ...customer, activity: customer.activity.map((a) => ({ ...a })) };
+async function readAll(): Promise<Customer[]> {
+  const redis = redisClient();
+  if (!redis) return memoryRead();
+
+  try {
+    // The REST client returns parsed JSON, so this is already an object.
+    const stored = await redis.get<Customer[]>(REDIS_KEY);
+    if (Array.isArray(stored) && stored.length > 0) return stored;
+
+    // First run against a fresh Redis: plant the seed.
+    const fresh = seed();
+    await redis.set(REDIS_KEY, fresh);
+    return fresh;
+  } catch (error) {
+    // Never take the demo down over a storage hiccup; degrade to memory.
+    console.error("[db] Redis read failed, falling back to memory:", error);
+    return memoryRead();
+  }
 }
 
-function nextId(prefix: string): string {
-  const store = getStore();
-  store.counter += 1;
-  return `${prefix}-${store.counter}`;
+async function writeAll(customers: Customer[]): Promise<void> {
+  const redis = redisClient();
+  if (!redis) {
+    globalStore.__zenEcommerceStore = customers;
+    return;
+  }
+
+  try {
+    await redis.set(REDIS_KEY, customers);
+  } catch (error) {
+    console.error("[db] Redis write failed, falling back to memory:", error);
+    globalStore.__zenEcommerceStore = customers;
+  }
+}
+
+function clone(customer: Customer): Customer {
+  return { ...customer, activity: customer.activity.map((a) => ({ ...a })) };
 }
 
 /** Money is rounded to cents to keep float drift out of the UI. */
@@ -193,24 +93,22 @@ function toCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export function listCustomers(): CustomerSummary[] {
-  return [...getStore().customers.values()].map(({ id, name, initials, tier }) => ({
-    id,
-    name,
-    initials,
-    tier,
-  }));
+export async function listCustomers(): Promise<CustomerSummary[]> {
+  const customers = await readAll();
+  return customers.map(({ id, name, initials, tier }) => ({ id, name, initials, tier }));
 }
 
-export function getCustomer(id?: string | null): Customer | undefined {
-  const customer = getStore().customers.get(id?.trim() || DEFAULT_CUSTOMER_ID);
+export async function getCustomer(id?: string | null): Promise<Customer | undefined> {
+  const wanted = id?.trim() || DEFAULT_CUSTOMER_ID;
+  const customer = (await readAll()).find((c) => c.id === wanted);
   return customer ? clone(customer) : undefined;
 }
 
 function record(customer: Customer, entry: Omit<ActivityEntry, "id" | "at">) {
   customer.activity.unshift({
     ...entry,
-    id: nextId(`${customer.id}-act`),
+    // Random suffix keeps ids unique without a shared counter across instances.
+    id: `${customer.id}-act-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
     at: new Date().toISOString(),
   });
   // Keep the demo timeline short enough to read at a glance.
@@ -224,29 +122,43 @@ export interface UpdateResult {
   previous: number;
 }
 
+/** Shared read-modify-write path for both balance fields. */
+async function applyUpdate(
+  id: string,
+  mutate: (customer: Customer) => { previous: number; delta: number },
+): Promise<UpdateResult | undefined> {
+  const customers = await readAll();
+  const wanted = id?.trim() || DEFAULT_CUSTOMER_ID;
+  const target = customers.find((c) => c.id === wanted);
+  if (!target) return undefined;
+
+  const { previous, delta } = mutate(target);
+  await writeAll(customers);
+  return { customer: clone(target), delta, previous };
+}
+
 export function updatePoints(
   id: string,
   action: UpdateAction,
   points: number,
   options: { label?: string; source?: ActivitySource } = {},
-): UpdateResult | undefined {
-  const customer = getStore().customers.get(id?.trim() || DEFAULT_CUSTOMER_ID);
-  if (!customer) return undefined;
-
-  const previous = customer.points;
-  // Balances never go negative, even if an agent sends an oversized deduction.
-  const next = Math.max(0, Math.round(action === "add" ? previous + points : points));
-  customer.points = next;
-
-  const delta = next - previous;
+): Promise<UpdateResult | undefined> {
   const { label, source = "api" } = options;
-  record(customer, {
-    label: label ?? (action === "set" ? "Points balance set" : "Points adjusted"),
-    points: delta,
-    source,
-  });
 
-  return { customer: clone(customer), delta, previous };
+  return applyUpdate(id, (customer) => {
+    const previous = customer.points;
+    // Balances never go negative, even if an agent sends an oversized deduction.
+    const next = Math.max(0, Math.round(action === "add" ? previous + points : points));
+    customer.points = next;
+
+    const delta = next - previous;
+    record(customer, {
+      label: label ?? (action === "set" ? "Points balance set" : "Points adjusted"),
+      points: delta,
+      source,
+    });
+    return { previous, delta };
+  });
 }
 
 export function updateWallet(
@@ -254,28 +166,25 @@ export function updateWallet(
   action: UpdateAction,
   amount: number,
   options: { label?: string; source?: ActivitySource } = {},
-): UpdateResult | undefined {
-  const customer = getStore().customers.get(id?.trim() || DEFAULT_CUSTOMER_ID);
-  if (!customer) return undefined;
-
-  const previous = customer.wallet;
-  const next = Math.max(0, toCents(action === "add" ? previous + amount : amount));
-  customer.wallet = next;
-
-  const delta = toCents(next - previous);
+): Promise<UpdateResult | undefined> {
   const { label, source = "api" } = options;
-  record(customer, {
-    label: label ?? (action === "set" ? "Wallet balance set" : "Wallet adjusted"),
-    amount: delta,
-    source,
-  });
 
-  return { customer: clone(customer), delta, previous };
+  return applyUpdate(id, (customer) => {
+    const previous = customer.wallet;
+    const next = Math.max(0, toCents(action === "add" ? previous + amount : amount));
+    customer.wallet = next;
+
+    const delta = toCents(next - previous);
+    record(customer, {
+      label: label ?? (action === "set" ? "Wallet balance set" : "Wallet adjusted"),
+      amount: delta,
+      source,
+    });
+    return { previous, delta };
+  });
 }
 
 /** Restores every profile to its seed values. Used by the demo drawer. */
-export function resetStore(): void {
-  const store = getStore();
-  store.customers = new Map(seed().map((c) => [c.id, c]));
-  store.counter = 0;
+export async function resetStore(): Promise<void> {
+  await writeAll(seed());
 }

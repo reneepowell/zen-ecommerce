@@ -16,17 +16,20 @@ import { DemoDrawer } from "@/components/demo-drawer";
 import { SupportWidget } from "@/components/support-widget";
 import { Toaster } from "@/components/toaster";
 
-// Balances live in memory and change out of band, so never prerender this.
+// Balances change out of band (agent writes), so never prerender this.
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const customer = getCustomer(DEFAULT_CUSTOMER_ID);
+export default async function Home() {
+  const [customer, customers] = await Promise.all([
+    getCustomer(DEFAULT_CUSTOMER_ID),
+    listCustomers(),
+  ]);
   if (!customer) notFound();
 
   return (
     <RewardsProvider
       initialCustomer={customer}
-      initialCustomers={listCustomers()}
+      initialCustomers={customers}
       goals={{ points: POINTS_GOAL, vipSpend: VIP_SPEND_GOAL }}
     >
       <SiteHeader />
@@ -57,7 +60,7 @@ export default function Home() {
 
       <footer className="border-t border-hairline py-6">
         <p className="mx-auto max-w-7xl px-4 text-xs text-ink-muted sm:px-6">
-          Zen Ecommerce — demo environment. Balances reset when the server restarts.
+          Zen Ecommerce — demo environment. Use the demo controls to reset balances.
         </p>
       </footer>
 

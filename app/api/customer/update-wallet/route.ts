@@ -26,10 +26,10 @@ export async function POST(request: Request) {
   const source: ActivitySource = body.source === "webhook" ? "webhook" : "api";
   const label = typeof body.label === "string" && body.label.trim() ? body.label.trim() : undefined;
 
-  const result = updateWallet(userId, action, amount, { label, source });
+  const result = await updateWallet(userId, action, amount, { label, source });
   if (!result) {
     return fail(`Unknown customer id: ${userId}`, 404, {
-      available: listCustomers().map((c) => c.id),
+      available: (await listCustomers()).map((c) => c.id),
     });
   }
 
