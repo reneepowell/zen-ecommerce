@@ -14,10 +14,34 @@ import type { Customer } from "./types";
  * once).
  */
 export function jwtConfig(): { keyId: string; secret: string } | null {
-  const keyId = process.env.ZENDESK_JWT_KEY_ID;
-  const secret = process.env.ZENDESK_JWT_SECRET;
+  const keyId = process.env.ZENDESK_JWT_KEY_ID?.trim();
+  const secret = process.env.ZENDESK_JWT_SECRET?.trim();
   if (!keyId || !secret) return null;
   return { keyId, secret };
+}
+
+/**
+ * Catches the env var whose value is its own name — an easy paste error in a
+ * dashboard UI that produces a token Zendesk silently rejects (the `kid` won't
+ * match any signing key, so the visitor stays anonymous with no error shown).
+ */
+export function jwtConfigProblem(): string | null {
+  const config = jwtConfig();
+  if (!config) return null;
+
+  const placeholders = [
+    "ZENDESK_JWT_KEY_ID",
+    "ZENDESK_JWT_SECRET",
+    "your-key-id",
+    "your-shared-secret",
+  ];
+  if (placeholders.includes(config.keyId)) {
+    return `ZENDESK_JWT_KEY_ID is set to the placeholder "${config.keyId}". Use the Key ID from Zendesk Admin Center → Channels → Messaging → your widget → Authentication.`;
+  }
+  if (placeholders.includes(config.secret)) {
+    return "ZENDESK_JWT_SECRET is set to a placeholder value rather than the real shared secret.";
+  }
+  return null;
 }
 
 /** Tokens are short-lived; the widget requests a fresh one when it needs it. */

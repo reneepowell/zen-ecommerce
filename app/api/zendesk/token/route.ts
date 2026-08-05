@@ -1,6 +1,6 @@
 import { fail, ok, preflight } from "@/lib/api";
 import { DEFAULT_CUSTOMER_ID, getCustomer } from "@/lib/db";
-import { jwtConfig, signZendeskJwt } from "@/lib/zendesk-jwt";
+import { jwtConfig, jwtConfigProblem, signZendeskJwt } from "@/lib/zendesk-jwt";
 
 // Tokens are per-customer and short-lived — never cache this.
 export const dynamic = "force-dynamic";
@@ -23,6 +23,11 @@ export async function GET(request: Request) {
       501,
     );
   }
+
+  // Misconfiguration produces a token Zendesk rejects without telling you, so
+  // fail loudly here instead.
+  const problem = jwtConfigProblem();
+  if (problem) return fail(problem, 500);
 
   const id = new URL(request.url).searchParams.get("id") ?? DEFAULT_CUSTOMER_ID;
   const customer = await getCustomer(id);

@@ -1,5 +1,6 @@
 import { ok, preflight } from "@/lib/api";
 import { storageMode } from "@/lib/db";
+import { jwtConfig, jwtConfigProblem } from "@/lib/zendesk-jwt";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const storage = storageMode();
+  const problem = jwtConfigProblem();
+
   return ok({
     ok: true,
     storage,
@@ -19,6 +22,18 @@ export async function GET() {
       storage === "redis"
         ? "Writes persist across instances and restarts."
         : "In-memory store: fine locally, but writes are lost on serverless instance recycling.",
+    zendeskAuth: {
+      configured: jwtConfig() !== null,
+      // Surfacing the key id is safe (it travels in every JWT header); the
+      // secret is never included.
+      keyId: process.env.ZENDESK_JWT_KEY_ID?.trim() ?? null,
+      problem,
+      hint:
+        problem ??
+        (jwtConfig()
+          ? "Visitors are authenticated as the selected demo profile."
+          : "Not configured — the widget loads anonymously, so the agent can't identify the customer."),
+    },
   });
 }
 
